@@ -1,0 +1,528 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BÜFA® Rail-Konfigurator – OPT v4 (R-Set Info)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .question-card { transition: all 0.2s ease-in-out; }
+    .question-card:hover { background: #fafafa; }
+    .chip { display:inline-flex; align-items:center; gap:.5rem; background:#f1f5f9; padding:.25rem .75rem; border-radius:999px; margin:.125rem; }
+    .kbd { background:#f3f4f6; border:1px solid #e5e7eb; border-bottom-width:2px; border-radius:.375rem; padding:.125rem .375rem; font-size:.875rem; }
+    @media print { .no-print { display: none; } body { background: white; } }
+    /* Tooltip helpers */
+    .tooltip { position: relative; display:inline-block; }
+    .tooltip .tooltip-panel { display:none; position:absolute; left:1.25rem; top:0; z-index:20; width:18rem; background:#fff; border:1px solid #e5e7eb; box-shadow:0 10px 20px rgba(0,0,0,.08); border-radius:.5rem; padding:.5rem .75rem; }
+    .tooltip:hover .tooltip-panel, .tooltip:focus-within .tooltip-panel { display:block; }
+  /* Print only the #result panel when body has .printing-result */
+@media print {
+  body.printing-result * { visibility: hidden !important; }
+  body.printing-result #result, 
+  body.printing-result #result * { visibility: visible !important; }
+  /* Re-position the result to the top-left to avoid empty grid columns */
+  body.printing-result #result {
+    position: absolute !important;
+    inset: 0 !important;   /* top:0; right:0; bottom:0; left:0 */
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0.5in !important; /* small print margin */
+    box-shadow: none !important;
+    border: 0 !important;
+    background: white !important;
+  }
+}
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <header class="mb-6">
+      <h1 class="text-3xl md:text-4xl font-bold text-blue-800">BÜFA® Rail-Konfigurator · OPT v4</h1>
+      <p class="text-gray-600 mt-1">Copilot/Autopilot · Laminatberechnung · Scoring · Export · Produktempfehlungen · <b>R-Set Info-Tooltip</b></p>
+      <div class="mt-2 text-xs text-gray-500">Build: OPT v4 – 2025-09-03</div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 lg:col-span-1">
+        <h2 class="text-xl font-semibold text-blue-700 mb-3">Steuerung</h2>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Modus</label>
+            <div class="flex gap-2">
+              <button id="mode-copilot" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white">Copilot</button>
+              <button id="mode-autopilot" class="px-3 py-1.5 rounded-lg bg-gray-200">Autopilot</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              Copilot: Fragt fehlende Pflichtangaben ab, <b>liefert aber trotzdem einen Vorschlag</b> (mit Annahmen).<br/>
+              Autopilot: Setzt sinnvolle Defaults ohne Rückfragen.
+            </p>
+          </div>
+
+          <div class="flex gap-2 no-print">
+            <button id="run-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg">Vorschlag erzeugen</button>
+            <button id="reset-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold px-4 py-2 rounded-lg">Zurücksetzen</button>
+          </div>
+
+          <div class="flex gap-2 mt-2 no-print">
+            <button id="export-json" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg">Export JSON</button>
+            <button id="print-pdf" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-semibold px-4 py-2 rounded-lg">Als PDF drucken</button>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Status</h3>
+          <div id="status" class="text-sm bg-gray-50 border border-gray-200 rounded-lg p-3">Bereit.</div>
+        </div>
+      </section>
+
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 lg:col-span-1">
+        <h2 class="text-xl font-semibold text-blue-700 mb-3">Eingaben</h2>
+        <form id="questionnaire" class="space-y-6"></form>
+      </section>
+
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 lg:col-span-1">
+        <h2 class="text-xl font-semibold text-blue-700 mb-3">Ergebnis</h2>
+        <div id="result" class="space-y-4 text-sm"><div class="text-gray-500">Noch kein Vorschlag berechnet.</div></div>
+      </section>
+
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 lg:col-span-3 hidden">
+        <h2 class="text-xl font-semibold text-blue-700 mb-3">Produkt-Empfehlungen (Detailansicht)</h2>
+        <div id="products" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+          <div class="text-gray-500">Noch keine Empfehlung berechnet.</div>
+        </div>
+      </section>
+
+    </div>
+
+    <footer class="mt-10 text-xs text-gray-500">© BÜFA Composites – interne Testversion (OPT v4).</footer>
+  </div>
+
+  <script>
+    // --- Daten ---
+    const QUESTIONNAIRE = {"modules": [{"name": "Modul 1: Allgemeine Bauteilparameter", "questions": [{"id": "q1_1", "text": "Bauart und Anwendungsklasse?", "type": "text", "options": ["Regionalzug", "Hochgeschwindigkeitszug", "Metro", "S-Bahn", "Tram"]}, {"id": "q1_2", "text": "Einbauort?", "type": "text"}, {"id": "q1_3", "text": "Oberflächenqualität?", "type": "select", "options": ["Kein Anspruch", "Technisch", "A-Fläche"]}]}, {"name": "Modul 2: Sicherheitsrelevanz / Risikobewertung", "questions": [{"id": "q2_1", "text": "Was passiert, wenn das Bauteil versagt?", "type": "text"}, {"id": "q2_2", "text": "Gibt es eine Crashbeanspruchung?", "type": "boolean", "options": ["Ja", "Nein"]}, {"id": "q2_3", "text": "Gibt es eine Brandbeanspruchung? Liegt eine Brandfreigabe vor?", "type": "boolean", "options": ["Ja", "Nein"]}]}, {"name": "Modul 3: Technische & normative Anforderungen", "questions": [{"id": "q3_1a", "text": "EN 45545 – R-Set(s)", "type": "multiselect", "options": ["R1", "R7", "R17"]}, {"id": "q3_1b", "text": "EN 45545 – Hazard Level (HL)", "type": "select", "options": ["HL1", "HL2", "HL3"]}, {"id": "q3_2", "text": "Geforderte Wärmeformbeständigkeit (HDT)", "type": "numerical", "unit": "°C"}, {"id": "q3_3", "text": "Medien-/Reinigungsbeständigkeit gefordert?", "type": "boolean", "options": ["Ja", "Nein"]}, {"id": "q3_5", "text": "Geforderte mechanische Kennwerte (wenn bekannt)", "type": "multiselect", "options": ["Zugfestigkeit", "Biegefestigkeit", "Schlagzähigkeit"]}, {"id": "q3_4_other", "text": "Sonstige Vorgaben/Normen (optional)", "type": "text"}]}, {"name": "Modul 4: Bauteilkomplexität & Herstellbarkeit", "questions": [{"id": "q4_1", "text": "Geometrische Komplexität?", "type": "select", "options": ["Hoch", "Mittel", "Niedrig"]}, {"id": "q4_2", "text": "Vorgesehenes Fertigungsverfahren?", "type": "select", "options": ["Handlaminierung", "Vakuuminfusion", "RTM", "Spray (Gelcoat)"]}]}, {"name": "Modul 5: Technisches Ziel / Engineering-Zielsetzung", "questions": [{"id": "q5_1", "text": "Primäre Ziele", "type": "multiselect", "options": ["Leichtbau", "Robustheit"]}, {"id": "q5_2", "text": "Styrolreduziert oder styrolfrei gewünscht?", "type": "boolean", "options": ["Ja", "Nein"]}, {"id": "q5_4", "text": "rPET-/nachhaltige Materialien bevorzugt?", "type": "boolean", "options": ["Ja", "Nein"]}]}, {"name": "Modul 6: Laminataufbau", "questions": [{"id": "q6_1", "text": "Strukturklasse des Bauteils?", "type": "select", "options": ["Primärstruktur", "Sekundärstruktur", "Interieurmodul", "Exterieurverkleidung"]}, {"id": "q6_2", "text": "Hauptbelastung(en)?", "type": "multiselect", "options": ["Biegung", "Zug", "Druck", "Schub", "Schlag/Steinschlag", "Vibration"]}, {"id": "q6_3", "text": "Ziel-Bauteildicke", "type": "numerical", "unit": "mm"}, {"id": "q6_4a", "text": "Ziel-Faser-Volumen-Anteil (Vol.-%)", "type": "numerical", "unit": "%"}, {"id": "q6_4b", "text": "Ziel-Arealgewicht (kg/m²)", "type": "numerical", "unit": "kg/m²"}, {"id": "q6_5", "text": "Verstärkungstyp(en)?", "type": "multiselect", "options": ["Emulsionsmatte", "Gewebe", "NCF biaxial", "NCF quadraxial", "UD", "Kombimatte", "3D-Gewebe"]}, {"id": "q6_6", "text": "Vorgesehene Lagenanzahl", "type": "numerical", "unit": "Anzahl"}, {"id": "q6_7", "text": "Lagenorientierung", "type": "multiselect", "options": ["UD 0°", "UD 90°", "0/90°", "±45°", "quasi-isotrop", "formfolgend"]}, {"id": "q6_8", "text": "Kernmaterial vorgesehen?", "type": "select", "options": ["Kein Kern", "FR-PET (auch rPET)", "PMI", "SAN", "Wabe (Alu/Nomex)"]}, {"id": "q6_9", "text": "Deckschicht/Gelcoat-Anforderung", "type": "select", "options": ["Keine", "UV-stabil (außen)", "Intumeszierend (FST)", "Topcoat matt (innen)"]}, {"id": "q6_10", "text": "Sichtflächen-Seite(n)", "type": "multiselect", "options": ["A-Seite", "B-Seite", "beide"]}, {"id": "q6_11", "text": "Postcure vorgesehen?", "type": "boolean", "options": ["Ja", "Nein"]}, {"id": "q6_13", "text": "Nachhaltigkeitspräferenz", "type": "select", "options": ["Neutral", "rPET bevorzugt", "Bio-Harze möglich"]}]}]};
+
+    const CONFIG = {
+      calculation: {
+        densities: { fiber_glass_gcm3: 2.55, resin_gcm3: 1.3, gelcoat_gcm3: 1.35 },
+        process_vf_bands: { hand_layup:[0.35,0.45], vacuum_infusion:[0.45,0.55], rtm:[0.50,0.60] },
+        compaction_factors: {
+          CSM:{hand_layup:1.35,vacuum_infusion:1.2,rtm:1.1},
+          NCF:{hand_layup:1.05,vacuum_infusion:1.0,rtm:0.95},
+          WOVEN:{hand_layup:1.10,vacuum_infusion:1.0,rtm:0.95},
+          UD:{hand_layup:1.05,vacuum_infusion:1.0,rtm:0.95}
+        },
+        core_resin_uptake_kgm2: { PET_FR:{per_mm:0.02} }
+      },
+      enums: { process:["hand_layup","vacuum_infusion","rtm","spray_gelcoat"] },
+      ui_localization: { process:{hand_layup:"Handlaminierung", vacuum_infusion:"Vakuuminfusion", rtm:"RTM", spray_gelcoat:"Spray (Gelcoat)"} },
+      products: [
+        {"code":"BÜFA®-FIRESTOP S570","processing":["hand_layup"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"73.4 °C"}},"not_postcured":{"properties":{"HDT":"61.6 °C"}}}]},
+        {"code":"BÜFA®-FIRESTOP 8175-W-1","processing":["hand_layup","rtm"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"93.7 °C"}},"not_postcured":{"properties":{"HDT":"64.1 °C"}}}]},
+        {"code":"BÜFA®-FIRESTOP 5001-W-2","processing":["hand_layup"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"70.9 °C"}},"not_postcured":{"properties":{"HDT":"56.6 °C"}}}]},
+        {"code":"BÜFA®-FIRESTOP S425","processing":["vacuum_infusion","vi"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"91.0 °C"}},"not_postcured":{"properties":{"HDT":"54.6 °C"}}}]},
+        {"code":"BÜFA®-FIRESTOP S440","processing":["vacuum_infusion"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"83.3 °C"}},"not_postcured":{"properties":{"HDT":"48.9 °C"}}}]},
+        {"code":"BÜFA®-FIRESTOP S520","processing":["rtm"],"mechanical":[{"type":"cast resin","postcured":{"properties":{"HDT":"98.0 °C"}},"not_postcured":{"properties":{"HDT":"66.5 °C"}}}]},
+        {"code":"BÜFA®-Firestop S 400","processing":["vacuum_infusion"],"mechanical":[]},
+        {"code":"BÜFA®-Firestop S 405","processing":["hand_layup"],"mechanical":[]},
+        {"code":"BÜFA®-Firestop S 585","processing":["rtm"],"mechanical":[]},
+        {"code":"BÜFA®-Firestop S 910 Foaming Resin","processing":["rtm"],"mechanical":[]},
+        {"code":"BÜFA®-FIRESTOP S320","processing":["spray_application"],"mechanical":[]},
+        {"code":"BÜFA®-FIRESTOP S270","processing":[],"mechanical":[]},
+        {"code":"BÜFA®-FIRESTOP S285","processing":[],"mechanical":[]}
+      ],
+      system_recommendations: {
+        hand_layup: ["BÜFA®-FIRESTOP 8175-W-1","BÜFA®-Firestop S 405","BÜFA®-FIRESTOP 5001-W-2"],
+        vacuum_infusion: ["BÜFA®-FIRESTOP S425","BÜFA®-Firestop S 400","BÜFA®-FIRESTOP S440"],
+        rtm: ["BÜFA®-FIRESTOP S520","BÜFA®-FIRESTOP 8175-W-1","BÜFA®-Firestop S 585","BÜFA®-Firestop S 910 Foaming Resin"]
+      }
+    };
+
+    // --- Helpers ---
+    function el(tag, cls, html) { const e=document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; }
+    function optionEl(v){ const o=document.createElement('option'); o.value=v; o.textContent=v; return o; }
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    const processMap = {"Handlaminierung":"hand_layup","Vakuuminfusion":"vacuum_infusion","RTM":"rtm","Spray (Gelcoat)":"spray_gelcoat"};
+    const defaultAreal = {"Emulsionsmatte":450,"Gewebe":410,"NCF biaxial":600,"NCF quadraxial":1230,"UD":800,"Kombimatte":600,"3D-Gewebe":600};
+    const PROCESS_ALIASES = { 'vi':'vacuum_infusion', 'spray_application':'spray_gelcoat' };
+    const gelcoatThicknessMm = 0.7;
+
+    // --- Render form with tooltip on q3_1a ---
+    function renderQuestion(q) {
+      const wrap = el('div','question-card p-4 border border-gray-200 rounded-lg');
+      let labelHTML = (q.text || q.id);
+      if (q.id === 'q3_1a') {
+        labelHTML = `EN 45545 – R-Set(s)
+          <span class="tooltip ml-1 align-middle">
+            <button type="button" class="text-blue-700 hover:text-blue-800 font-semibold" aria-describedby="tip-rsets">ℹ️</button>
+            <span id="tip-rsets" role="tooltip" class="tooltip-panel text-xs leading-snug">
+              <b>Was sind R-Sets?</b><br/>
+              R-Sets benennen die Bauteilkategorie in EN 45545.<br/><br/>
+              <b>R1</b>: Innenverkleidungen (Paneele, Decken, Wände).<br/>
+              <b>R7</b>: Außenverkleidungen/Dachaufbauten (exponierte Teile).<br/>
+              <b>R17</b>: Sitze und Sitzkomponenten im Fahrgastraum.<br/><br/>
+              In Kombi mit dem Hazard Level (HL1–HL3) ergibt sich die geforderte FST-Leistung.
+            </span>
+          </span>`;
+      }
+      const label = el('label','block text-gray-800 font-medium mb-2', labelHTML);
+      label.htmlFor = q.id;
+      wrap.appendChild(label);
+
+      let inputEl = null;
+      if(q.type === 'text') {
+        inputEl = el('input','w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500');
+        inputEl.type='text'; inputEl.id=q.id; inputEl.name=q.id; inputEl.placeholder='...';
+      } else if(q.type === 'numerical') {
+        const box = el('div','relative');
+        inputEl = el('input','w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500');
+        inputEl.type='number'; inputEl.step='any'; inputEl.id=q.id; inputEl.name=q.id; inputEl.placeholder='z. B. 50';
+        box.appendChild(inputEl);
+        if(q.unit) { const u=el('span','absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500', q.unit); box.appendChild(u); }
+        wrap.appendChild(box); return wrap;
+      } else if(q.type === 'boolean' || q.type === 'select') {
+        inputEl = el('select','w-full p-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500');
+        inputEl.id=q.id; inputEl.name=q.id;
+        inputEl.appendChild(optionEl('')); (q.options||[]).forEach(opt => inputEl.appendChild(optionEl(opt)));
+      } else if(q.type === 'multiselect') {
+        const multi = el('div','flex flex-wrap gap-2'); multi.id=q.id;
+        (q.options||[]).forEach(opt => {
+          const chip = el('label','chip cursor-pointer hover:bg-slate-200');
+          const cb = el('input'); cb.type='checkbox'; cb.name=q.id; cb.value=opt; cb.className='h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500';
+          const span = el('span','', opt);
+          chip.appendChild(cb); chip.appendChild(span); multi.appendChild(chip);
+        });
+        wrap.appendChild(multi); return wrap;
+      } else {
+        inputEl = el('input','w-full p-2 border border-gray-300 rounded-md'); inputEl.type='text'; inputEl.id=q.id; inputEl.name=q.id;
+      }
+      wrap.appendChild(inputEl);
+      return wrap;
+    }
+
+    function renderForm() {
+      const form = document.getElementById('questionnaire');
+      form.innerHTML='';
+      (QUESTIONNAIRE.modules||[]).forEach(mod => {
+        const modBlock = el('section','mb-8');
+        const h = el('h3','text-lg font-semibold text-blue-700 mb-3', mod.name||'Modul');
+        modBlock.appendChild(h);
+        (mod.questions||[]).forEach(q => modBlock.appendChild(renderQuestion(q)));
+        form.appendChild(modBlock);
+      });
+    }
+    renderForm();
+
+    // --- Rest wie OPT3 (Berechnung, Empfehlungen, Rendering) ---
+    function gatherAnswers() {
+      const answers = {};
+      $$('input, select, textarea').forEach(inp => { if(inp.type==='checkbox') return; const v=inp.value; if(v!=='' && v!=null) answers[inp.name]=v; });
+      (QUESTIONNAIRE.modules||[]).forEach(m=>{
+        (m.questions||[]).forEach(q=>{
+          if(q.type==='multiselect') {
+            const cbs = $$('div#'+q.id+' input[type="checkbox"]:checked');
+            if(cbs.length) answers[q.id]=cbs.map(cb=>cb.value);
+          }
+        });
+      });
+      return answers;
+    }
+    function requiredFields(a) {
+      const req = ['q4_2','q6_5','q6_3'];
+      if((a['q6_10']||[]).includes('A-Seite')) req.push('q6_9');
+      if(!a['q6_4a'] && !a['q6_4b']) req.push('q6_4a');
+      return Array.from(new Set(req));
+    }
+    function inferDefaults(missing, a) {
+      const out = {};
+      missing.forEach(id => {
+        if(id==='q4_2') out[id]='Vakuuminfusion';
+        if(id==='q6_2') out[id]=['Biegung'];
+        if(id==='q6_5') out[id]=['NCF biaxial','UD'];
+        if(id==='q6_4a' && !a['q6_4b']) out[id]=50;
+        if(id==='q6_9') out[id]='UV-stabil (außen)';
+        if(id==='q6_10') out[id]=['A-Seite'];
+        if(id==='q6_11') out[id]='Nein';
+        if(id==='q6_3') out[id]=4.0;
+      });
+      return out;
+    }
+    function mapProcessEnum(v) { return ({"Handlaminierung":"hand_layup","Vakuuminfusion":"vacuum_infusion","RTM":"rtm","Spray (Gelcoat)":"spray_gelcoat"}[v])||v; }
+    function densitiesSI(answers) {
+      const d = (CONFIG.calculation && CONFIG.calculation.densities) || {};
+      const rho_f = (d.fiber_glass_gcm3 || 2.55) * 1000;
+      const rho_r_matrix = (d.resin_gcm3 || 1.30) * 1000;
+      const rho_gelcoat = (d.gelcoat_gcm3 || d.resin_gcm3 || 1.30) * 1000;
+      return { rho_f, rho_r_matrix, rho_gelcoat };
+    }
+    function getVF(answers) {
+      const bands = CONFIG.calculation.process_vf_bands||{};
+      const procEnum = mapProcessEnum(answers['q4_2']||'Vakuuminfusion');
+      const band = bands[procEnum]||[0.45,0.55];
+      const vf = answers['q6_4a']? (parseFloat(answers['q6_4a'])/100) : ((band[0]+band[1])/2);
+      return Math.max(0.2, Math.min(0.7, vf));
+    }
+    function compactionFactor(layerType, procEnum) {
+      const table = (CONFIG.calculation.compaction_factors||{})[layerType]||{};
+      return table[procEnum]||1.0;
+    }
+    function proposeStack(answers) {
+      const reinf = answers['q6_5']||['NCF biaxial','UD'];
+      const stack = [];
+      reinf.forEach(name=>{
+        const areal = ({"Emulsionsmatte":450,"Gewebe":410,"NCF biaxial":600,"NCF quadraxial":1230,"UD":800,"Kombimatte":600,"3D-Gewebe":600}[name])||600;
+        const type = (name==='Emulsionsmatte'?'CSM':(name.includes('UD')?'UD':(name.includes('NCF')?'NCF':'WOVEN')));
+        const orient = (name==='Emulsionsmatte'?'random':(name.includes('UD')?'0°':(name.includes('quadraxial')?'0/±45/90':(name.includes('biaxial')?'±45':'0/90'))));
+        stack.push({name, type, orientation: orient, areal_weight_gsm: areal, layers: 1});
+      });
+      if(stack.length===1) stack[0].layers=2;
+      return stack;
+    }
+    function calcLaminate(answers, stack) {
+      const { rho_f, rho_r_matrix, rho_gelcoat } = densitiesSI(answers);
+      const procEnum = mapProcessEnum(answers['q4_2']||'Vakuuminfusion');
+      const Vf = getVF(answers);
+      let t_mm=0, m_f=0, m_r_matrix=0, m_r_gelcoat=0; const layersOut=[];
+      stack.forEach(L=>{
+        const layers=L.layers||1;
+        const cf = compactionFactor(L.type||'WOVEN', procEnum);
+        const areal_kgm2 = (L.areal_weight_gsm/1000)*layers;
+        const t_m = (areal_kgm2 / (rho_f * Vf)) * cf;
+        const t_layer_mm = t_m * 1000;
+        const m_r_layer = rho_r_matrix * (1 - Vf) * t_m;
+        t_mm += t_layer_mm; m_f += areal_kgm2; m_r_matrix += m_r_layer;
+        layersOut.push({...L, thickness_mm:t_layer_mm.toFixed(3)});
+      });
+      if((answers['q6_9']||'')!=='Keine'){ t_mm+=0.7; m_r_gelcoat+=rho_gelcoat*(0.7/1000); }
+      if((answers['q6_8']||'')==='FR-PET (auch rPET)'){ const core_t_mm=answers['core_thickness_mm']?parseFloat(answers['core_thickness_mm']):10; t_mm+=core_t_mm; m_r_matrix+=(CONFIG.calculation.core_resin_uptake_kgm2.PET_FR.per_mm||0.02)*core_t_mm; }
+      const resin_mass_total = m_r_matrix + m_r_gelcoat;
+      return { thickness_mm:parseFloat(t_mm.toFixed(3)), fiber_mass_kgm2:parseFloat(m_f.toFixed(3)), resin_mass_kgm2:parseFloat(resin_mass_total.toFixed(3)), resin_mass_matrix_kgm2:parseFloat(m_r_matrix.toFixed(3)), gelcoat_mass_kgm2:parseFloat(m_r_gelcoat.toFixed(3)), vf_effective:parseFloat(Vf.toFixed(3)), layers:layersOut, rho_r_matrix: rho_r_matrix, rho_gelcoat: rho_gelcoat };
+    }
+    function validate(answers, calc) {
+      const fails=[]; const warns=[];
+      if(answers['q6_4a'] && answers['q6_4b']) warns.push('Bitte nur FVF ODER Arealgewicht angeben.');
+      if(answers['q6_3'] && answers['q6_6'] && (answers['q6_4a']||answers['q6_4b'])) warns.push('Überbestimmung: Dicke + Lagenanzahl + FVF/Gewicht gleichzeitig gesetzt.');
+      const band=CONFIG.calculation.process_vf_bands[mapProcessEnum(answers['q4_2']||'Vakuuminfusion')];
+      if(band && (calc.vf_effective<band[0] || calc.vf_effective>band[1])) warns.push('FVF außerhalb des Prozessbandes.');
+      if((answers['q6_10']||[]).includes('A-Seite') && (answers['q6_9']||'')==='Keine') warns.push('A-Seite ohne Gelcoat ist unplausibel.');
+      return {fails, warns};
+    }
+    function productSupportsProcess(product, procEnum) {
+      const procs=(product.processing||[]).map(p=> (p==='vi'?'vacuum_infusion':(p==='spray_application'?'spray_gelcoat':p)));
+      return procs.includes(procEnum);
+    }
+    function productHDT(product, postcure) {
+      const m=(product.mechanical||[]).find(x=>x.type==='cast resin'); if(!m) return null;
+      const p=postcure==='Ja'?m.postcured?.properties:m.not_postcured?.properties; if(!p||!p.HDT) return null;
+      const num=parseFloat(String(p.HDT).replace(/[^\d.]/g,'')); return isNaN(num)?null:num;
+    }
+    function marketingTeaser(code){
+      if(/S\s?425/.test(code)) return "Top für Vakuuminfusion – bewährt, gute HDT-Reserve.";
+      if(/S\s?440/.test(code)) return "Vinylester-Basis – höhere mechanische Werte.";
+      if(/8175/.test(code)) return "Handlaminat-Klassiker – vielseitig einsetzbar.";
+      if(/S\s?520/.test(code)) return "RTM-Bestseller – hohe HDT, saubere Formfüllung.";
+      if(/S\s?400/.test(code)) return "rPET zum S 425 – nachhaltig ohne Performance-Verlust.";
+      if(/S\s?405/.test(code)) return "rPET zum 8175 – nachhaltig und prozesssicher.";
+      if(/S\s?585/.test(code)) return "RTM Class-A – sehr geringer Schwund.";
+      if(/S\s?910/.test(code)) return "RTM Schaumsystem – Leichtbau.";
+      if(/S\s?570/.test(code)) return "Handlaminat – höher gefüllt, gute FST.";
+      if(/5001/.test(code)) return "Sehr hoher ATH-Anteil – FST-fokussiert.";
+      return "Passend zum gewählten Prozess – abgestimmt auf Ihren Stack.";
+    }
+    function tieredCandidates(a){
+      const procEnum = mapProcessEnum(a['q4_2']||'Vakuuminfusion');
+      const hdtTarget = a['q3_2'] ? parseFloat(a['q3_2']) : null;
+      const postcure = a['q6_11'] || 'Nein';
+      let t1=CONFIG.products.filter(p=> productSupportsProcess(p, procEnum) && (hdtTarget==null || (productHDT(p, postcure)||0) >= hdtTarget));
+      if(t1.length) return t1;
+      let t2=CONFIG.products.filter(p=> productSupportsProcess(p, procEnum));
+      if(t2.length) return t2;
+      const sys=(CONFIG.system_recommendations||{})[procEnum]||[]; const dict=new Map(CONFIG.products.map(p=>[p.code,p])); let t3=sys.map(c=>dict.get(c)).filter(Boolean);
+      if(t3.length) return t3;
+      return CONFIG.products.slice();
+    }
+    function recommendProducts(a) {
+      const procEnum = mapProcessEnum(a['q4_2']||'Vakuuminfusion');
+      const hdtTarget = a['q3_2'] ? parseFloat(a['q3_2']) : null;
+      const postcure = a['q6_11'] || 'Nein';
+      const prefRPET = a['q6_13']==='rPET bevorzugt';
+      const cands = tieredCandidates(a);
+      function s_proc(p){ return productSupportsProcess(p, procEnum)?1.0:0.6; }
+      function s_mech(p){ if(hdtTarget==null) return 0.6; const hdt=productHDT(p, postcure); if(!hdt) return 0.5; const over=Math.max(0, Math.min(1,(hdt-hdtTarget)/Math.max(1,hdtTarget))); return 0.5+0.5*over; }
+      function s_sust(p){ return prefRPET && /S\s?400|S\s?405/i.test(p.code) ? 0.95 : 0.5; }
+      function s_surf(p){ return ((a['q6_10']||[]).includes('A-Seite') && (a['q6_9']||'')!=='Keine')?0.9:0.5; }
+      const w_proc=0.4, w_mech=0.35, w_sust=0.15, w_surf=0.10;
+      const scored=cands.map(p=>({product:p, score:parseFloat((w_proc*s_proc(p)+w_mech*s_mech(p)+w_sust*s_sust(p)+w_surf*s_surf(p)).toFixed(3))})).sort((a,b)=>b.score-a.score);
+      return scored.slice(0,3);
+    }
+    function renderProductsGrid(items) {
+      const box=document.getElementById('products'); box.innerHTML='';
+      items.forEach(({product, score})=>{
+        const div=document.createElement('div'); div.className='p-3 border rounded-lg';
+        const teaser=marketingTeaser(product.code);
+        div.innerHTML=`<div class="font-semibold">${product.code}</div>
+          <div class="text-xs text-gray-600">Prozess-Freigaben: ${(product.processing||[]).join(', ')||'–'}</div>
+          <div class="text-sm mt-1">Score: <b>${score}</b></div>
+          <div class="text-xs text-gray-700 mt-2">${teaser}</div>
+          <div class="mt-2"><a href="#" class="inline-block px-3 py-1.5 border rounded-lg text-blue-700 hover:bg-blue-50">Jetzt beraten lassen</a></div>`;
+        box.appendChild(div);
+      });
+    }
+    function renderProductsCompact(items) {
+      const wrap=el('div','mt-4');
+      wrap.appendChild(el('h4','font-semibold text-blue-700 mb-2','Top‑3 Produktempfehlungen'));
+      const list=el('div','space-y-2');
+      items.forEach(({product, score})=>{
+        const row=el('div','p-2 border rounded-md flex items-start justify-between gap-3');
+        const left=el('div','', `<div class="font-medium">${product.code}</div><div class="text-xs text-gray-600">${marketingTeaser(product.code)}</div>`);
+        const right=el('div','text-xs text-gray-700','Score: <b>'+score+'</b>');
+        row.appendChild(left); row.appendChild(right); list.appendChild(row);
+      });
+      wrap.appendChild(list); return wrap;
+    }
+    function scoreOverall(answers, calc) {
+      const w_proc = 0.35, w_mech = 0.35, w_media = 0.10, w_sust = 0.10, w_surf = 0.10;
+      let s_proc = answers['q4_2']?1.0:0.5;
+      let s_mech = 0.6;
+      if(answers['q6_3']) { const tgt=parseFloat(answers['q6_3']); const err=Math.abs((calc.thickness_mm - tgt)/Math.max(1,tgt)); s_mech=Math.max(0,1-err); }
+      let s_media = (answers['q3_3']==='Ja') ? 0.8 : 0.5;
+      let s_sust = (answers['q6_13']==='rPET bevorzugt')?0.9:0.5;
+      let s_surf = ((answers['q6_10']||[]).includes('A-Seite') && (answers['q6_9']||'')!=='Keine')?0.9:0.5;
+      const total = w_proc*s_proc + w_mech*s_mech + w_media*s_media + w_sust*s_sust + w_surf*s_surf;
+      return { total: parseFloat(total.toFixed(3)), breakdown: {process_fit:s_proc, mechanical_fit:s_mech, media_resistance:s_media, sustainability:s_sust, surface_quality:s_surf} };
+    }
+    function renderResult(answers, calc, validation, scoring, productsTop) {
+      const box = $('#result'); box.innerHTML='';
+      const head = el('div','flex items-center justify-between');
+      head.appendChild(el('div','text-sm text-gray-600','Prozess: <b>'+ (answers['q4_2']||'-') +'</b> · Ziel-Dicke: <b>'+(answers['q6_3']||'-')+' mm</b>'));
+      head.appendChild(el('div','text-sm','Score gesamt: <b>'+scoring.total+'</b>'));
+      box.appendChild(head);
+
+      // Kennzahlen
+      const g = el('div','grid grid-cols-2 gap-3 mt-3');
+      g.appendChild(el('div','p-3 border rounded-lg','Effektiver FVF: <b>'+ (calc.vf_effective*100).toFixed(1) +'%</b>'));
+      g.appendChild(el('div','p-3 border rounded-lg','Berechnete Dicke: <b>'+ calc.thickness_mm +' mm</b>'));
+      g.appendChild(el('div','p-3 border rounded-lg','Fasermasse: <b>'+ calc.fiber_mass_kgm2 +' kg/m²</b>'));
+      g.appendChild(el('div','p-3 border rounded-lg','Harzmasse (inkl. Gelcoat): <b>'+ calc.resin_mass_kgm2 +' kg/m²</b><br/><span class="text-xs text-gray-600">Matrix: '+calc.resin_mass_matrix_kgm2+' · Gelcoat: '+calc.gelcoat_mass_kgm2+' kg/m²</span>'));
+      box.appendChild(g);
+
+      
+      // --- EMPFEHLUNGEN: zusammengefasst als EIN Block ---
+      const recWrap = el('div','mt-3');
+      recWrap.appendChild(el('h4','font-semibold text-blue-700 mb-2','Top-3 Produktempfehlungen'));
+      const grid = el('div','grid grid-cols-1 md:grid-cols-2 gap-3');
+      productsTop.forEach(({product, score})=>{
+        const teaser = marketingTeaser(product.code);
+        const card = el('div','p-3 border rounded-lg');
+        card.innerHTML = `<div class="font-semibold">${product.code}</div>
+          <div class="text-xs text-gray-600">Prozess-Freigaben: ${(product.processing||[]).join(', ')||'–'}</div>
+          <div class="text-sm mt-1">Score: <b>${score}</b></div>
+          <div class="text-xs text-gray-700 mt-2">${teaser}</div>
+          <div class="mt-2"><a href="#" class="inline-block px-3 py-1.5 border rounded-lg text-blue-700 hover:bg-blue-50">Jetzt beraten lassen</a></div>`;
+        grid.appendChild(card);
+      });
+      recWrap.appendChild(grid);
+      box.appendChild(recWrap);
+
+      // Laminat-Stack
+    
+      const layers = el('div','mt-4'); 
+      layers.appendChild(el('h4','font-semibold text-blue-700 mb-2','Stack (Lagen)'));
+      calc.layers.forEach((L, i)=> layers.appendChild(el('div','p-2 border rounded-md mb-1',''+(i+1)+'. '+L.name+' · '+L.orientation+' · '+L.areal_weight_gsm+' gsm · Dicke: '+L.thickness_mm+' mm · Lagen: '+(L.layers||1))));
+      box.appendChild(layers);
+
+      // Scoring-Details
+      const br = scoring.breakdown;
+      const scoreBox = el('div','mt-4'); 
+      scoreBox.appendChild(el('h4','font-semibold text-blue-700 mb-2','Scoring-Details'));
+      scoreBox.appendChild(el('div','text-sm text-gray-700','Prozess-Fit: '+br.process_fit.toFixed(2)+' · Mechanik: '+br.mechanical_fit.toFixed(2)+' · Medien: '+br.media_resistance.toFixed(2)+' · Nachhaltigkeit: '+br.sustainability.toFixed(2)+' · Oberfläche: '+br.surface_quality.toFixed(2)));
+      box.appendChild(scoreBox);
+
+      // Hinweise
+      if(validation.warns.length || validation.fails.length) {
+        const issues = el('div','mt-4'); 
+        issues.appendChild(el('h4','font-semibold text-yellow-700 mb-2','Hinweise & Prüfungen'));
+        validation.fails.forEach(m=> issues.appendChild(el('div','p-2 border border-red-300 bg-red-50 rounded-md mb-1','❌ '+m)));
+        validation.warns.forEach(m=> issues.appendChild(el('div','p-2 border border-yellow-300 bg-yellow-50 rounded-md mb-1','⚠️ '+m)));
+        box.appendChild(issues);
+      }
+
+      // Statement
+      const stmt = el('div','mt-4 p-3 border rounded-md bg-slate-50');
+      stmt.innerHTML = '<b>Laminat-Statement:</b><br/>' +
+        'Prozess <b>'+(answers['q4_2']||'-')+'</b>, Verstärkungen <b>'+((answers['q6_5']||[]).join(' + ')||'—')+'</b>, ' +
+        'FVF <b>'+ (calc.vf_effective*100).toFixed(0) +'%</b>, Dicke <b>'+calc.thickness_mm+' mm</b>, ' +
+        'Fasermasse <b>'+calc.fiber_mass_kgm2+' kg/m²</b>, Harzmasse <b>'+calc.resin_mass_kgm2+' kg/m²</b>.' +
+        ( (answers['q6_9']||'')!=='Keine' ? ' Gelcoat <b>0,7 mm</b> berücksichtigt.' : '' );
+      box.appendChild(stmt);
+    }
+
+    // --- Events ---
+    let MODE='copilot';
+    document.getElementById('mode-copilot').addEventListener('click', () => {
+      MODE='copilot';
+      document.getElementById('mode-copilot').className='px-3 py-1.5 rounded-lg bg-blue-600 text-white';
+      document.getElementById('mode-autopilot').className='px-3 py-1.5 rounded-lg bg-gray-200';
+      document.getElementById('status').textContent='Copilot aktiv.';
+    });
+    document.getElementById('mode-autopilot').addEventListener('click', () => {
+      MODE='autopilot';
+      document.getElementById('mode-autopilot').className='px-3 py-1.5 rounded-lg bg-blue-600 text-white';
+      document.getElementById('mode-copilot').className='px-3 py-1.5 rounded-lg bg-gray-200';
+      document.getElementById('status').textContent='Autopilot aktiv.';
+    });
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      document.getElementById('questionnaire').reset();
+      document.getElementById('result').innerHTML='<div class="text-gray-500">Zurückgesetzt.</div>';
+      document.getElementById('products').innerHTML='<div class="text-gray-500">Noch keine Empfehlung berechnet.</div>';
+      document.getElementById('status').textContent='Bereit.';
+    });
+    document.getElementById('run-btn').addEventListener('click', () => {
+      let a = gatherAnswers();
+      const req = requiredFields(a);
+      const missing = req.filter(id => !(id in a));
+      let inferred = {};
+      if(missing.length) {
+        inferred = inferDefaults(missing, a);
+        a = Object.assign({}, a, inferred);
+        document.getElementById('status').innerHTML = 'Es fehlen Angaben, es wurden Annahmen getroffen: <span class="chip">'+Object.keys(inferred).join('</span> <span class="chip">')+'</span>';
+      } else {
+        document.getElementById('status').textContent='Berechne Vorschlag ...';
+      }
+      const stack = proposeStack(a);
+      const calc = calcLaminate(a, stack);
+      const val = validate(a, calc);
+      const scr = scoreOverall(a, calc);
+      const recs = recommendProducts(a);
+      renderResult(a, calc, val, scr, recs);
+      renderProductsGrid(recs);
+      window.__lastResult = {answers:a, calculation:calc, validation:val, scoring:scr, products:recs};
+      document.getElementById('status').textContent='Fertig.';
+      document.getElementById('result').scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    document.getElementById('print-pdf').addEventListener('click', () => {
+      if (!window.__lastResult) { alert('Bitte zuerst einen Vorschlag erzeugen.'); return; }
+      document.body.classList.add('printing-result');
+      const cleanup = () => {
+        document.body.classList.remove('printing-result');
+        window.removeEventListener('afterprint', cleanup);
+      };
+      window.addEventListener('afterprint', cleanup);
+      window.print();
+    });
+    document.getElementById('export-json').addEventListener('click', ()=> {
+      const data = window.__lastResult || {note:'Noch kein Ergebnis berechnet'};
+      const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'konfigurator_ergebnis.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
+    });
+  </script>
+</body>
+</html>
